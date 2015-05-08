@@ -5,17 +5,16 @@ Created on May 1, 2015
 '''
 
 
-import numpy as np
-import array
 import os
-from scipy.fftpack import rfft, irfft
-from sklearn import decomposition
-from matplotlib import pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
 import cPickle
-import datetime
-from IPython.utils.tests.test_module_paths import TEST_FILE_PATH
+import numpy as np
+import logging
 
+from scipy.fftpack import rfft
+from sklearn import decomposition
+from sklearn import preprocessing
+
+from AudioFilesPreprocessor import AudioFilesPreprocessor
 
 
 # TODO list:
@@ -30,99 +29,23 @@ from IPython.utils.tests.test_module_paths import TEST_FILE_PATH
 
 # Metal - 44100
 # C - half and half
-# Keys - 96000
-
-
-class AudioFilesPreprocessor(object):
-    
-    '''
-    This class pre-process the audio files. 
-    It removes silence from the beginning and the end of each file using SoX. (should be installed on your system)
-    It also removes the original signal from the picked-up signal by subtracting them in the frequency domain.
-    The results are saved in an np.array format in the folder specified in original_signal_substracted_path.
-    '''
-    silence_stripped_path = "Silence_stripped"
-    original_signal_substracted_path = "Original_substracted"
-    silence_configuration = {"below_period" : 1,
-                             "override_duration": 0,
-                             "threshold" : 1}
-
-    
-    def __init__(self, base_path, audio_files_configuration, original_sound_base_path, original_sound_file_name):
-        self.base_path = base_path
-        self.audio_configuration = audio_files_configuration
-        self.original_sound_base_path = original_sound_base_path
-        self.original_sound_file_name = original_sound_file_name
-        
-    def strip_silence_from_file(self, base_path, file_name):
-        file_absolute_path = os.path.join(base_path, file_name).replace(" ","\ ").replace("(", "\(").replace(")","\)")
-        output_file = os.path.join(base_path, self.silence_stripped_path, file_name).replace(" ","\ ").replace("(", "\(").replace(")","\)")
-        sox_command = "/usr/local/bin/sox -e %s -b%d -L -r%d -c1 %s %s " % (self.audio_configuration["encoding"],
-                                                             self.audio_configuration["encoding_size"],
-                                                             self.audio_configuration["sample_rate"],
-                                                             file_absolute_path,
-                                                             output_file)   
-        silence_filter = "silence %d %d %s reverse silence %d %d %s reverse" % (self.silence_configuration["below_period"],
-                                                                                self.silence_configuration["override_duration"],
-                                                                                str(self.silence_configuration["threshold"]) + "%",
-                                                                                self.silence_configuration["below_period"],
-                                                                                self.silence_configuration["override_duration"],
-                                                                                str(self.silence_configuration["threshold"]) + "%")
-        print "AudioFilesPreprocessor removing silence: %s" % (sox_command + silence_filter)
-        print os.popen(sox_command + silence_filter).read()
-        
-    def strip_silence_from_entire_dataset(self):
-        files = [self.strip_silence_from_file(self.base_path,file_name) for file_name in os.listdir(self.base_path) if (("DS" not in file_name) and (os.path.isfile(os.path.join(self.base_path,file_name))))]
-        
-        
-    def get_signal_array_from_file(self, base_path, file_name):
-        sound_file = open(os.path.join(base_path, file_name),"rb")
-        sound_raw_buffer = sound_file.read()
-        signal_array = np.array(array.array(self.audio_configuration["encoding_for_array"],sound_raw_buffer).tolist(), self.audio_configuration["encoding_dtype"])
-        return signal_array
-    
-    def subtract_original_signal_from_picked_signal(self, original_signal, picked_signal):
-        # Note this function assumes that the signals are aligned for the starting point!
-        fft_length = max(len(original_signal), len(picked_signal))
-        original_f_domain = rfft(original_signal, n= fft_length)
-        picked_f_domain = rfft(picked_signal, n= fft_length)
-        assert len(original_f_domain) == len(picked_f_domain)
-        difference_signal = picked_f_domain - original_f_domain
-        return irfft(difference_signal)
-    
-    def subtract_original_signal_from_dataset(self, original_signal_base_path, original_signal_file_name):
-        self.original_signal = self.get_signal_array_from_file(original_signal_base_path, original_signal_file_name)
-        files_list = [file_name for file_name in os.listdir(os.path.join(self.base_path,self.silence_stripped_path)) 
-                      if (os.path.isfile(os.path.join(self.base_path,self.silence_stripped_path,file_name)) and ("DS" not in file_name))]    
-        for file_name in files_list:
-            print "AudioFilesPreprocessor removing original sound from: %s" % (file_name)
-            signal = self.get_signal_array_from_file(os.path.join(self.base_path,self.silence_stripped_path), file_name)
-            substracted_signal = self.subtract_original_signal_from_picked_signal(self.original_signal,signal)
-            np.save(os.path.join(self.base_path,self.original_signal_substracted_path,file_name),substracted_signal)
-            
-    def preprocess_dataset(self, strip_silence=True, subtract_original=True, normalize=False):
-        if strip_silence: self.strip_silence_from_entire_dataset()
-        if subtract_original: self.subtract_original_signal_from_dataset(self.original_sound_base_path, self.original_sound_file_name)
-        
-    def preprocess_file(self, base_path, file_name, strip_silence=True, subtract_original=True, normalize=False):
-        print "AudioFilesPreprocessor: preprocessing file: %s" % file_name
-        signal = self.get_signal_array_from_file(base_path, file_name)
-        if strip_silence: self.strip_silence_from_file(base_path, file_name)
-        if subtract_original: self.subtract_original_signal_from_picked_signal(self.original_signal,signal)
-            
-        
-              
+# Keys - 96000  
 
 class Datasets_Manager(object):
     def __init__(self):
         pass
         
-    def load_learning_dataset (self, base_path):
+    def load_learning_dataset (self, base_path, standardize=False):
         self.x, self.y_loc, self.y_obj = self.load_signals_dataset(os.path.join(base_path, AudioFilesPreprocessor.original_signal_substracted_path))
+        if standardize: self.standardize_dataset()
         self.x = self.transform_and_reduce_dataset(self.x)
         
+    def standardize_dataset(self):
+        self.scaler = preprocessing.StandardScaler().fit(self.x)
+        self.x = self.scaler.transform(self.x)
+        
     def load_signals_dataset(self, base_path):
-        print "Datasets_Manager: loading dataset from %s" % base_path
+        logging.info("Datasets_Manager: loading dataset from %s" % base_path)
         data_file_names = [file_name for file_name in os.listdir(base_path)
                            if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
         np_arrays_dataset = [np.load(os.path.join(base_path,file_name)) for file_name in data_file_names]
@@ -132,7 +55,7 @@ class Datasets_Manager(object):
         
         y_loc = np.array([self.get_location_label_from_filename(file_name) for file_name in data_file_names])
         y_obj = np.array([self.get_object_label_from_filename(file_name) for file_name in data_file_names])
-        print "Datasets_Manager: dataset loaded"
+        logging.info("Datasets_Manager: dataset loaded")
         return x, y_loc, y_obj
     
     def get_object_label_from_filename(self, file_name):
@@ -194,138 +117,17 @@ class DSManager_DFTDimReduction(Datasets_Manager):
                 
         freq_domain_dataset = np.array([self.seperate_real_and_imaginary_parts(rfft(signal)) for signal in time_domain_dataset])
         self.pca = decomposition.PCA(self.reduced_dimentionality)
-        print "DSManager_DFTDimReduction: fitting PCA to frequency domain dataset"
+        logging.info("DSManager_DFTDimReduction: fitting PCA to frequency domain dataset to reduce dimensionality")
         self.pca.fit(freq_domain_dataset)
-        print "PCA fitted"
         reduced_freq_domain_dataset = self.pca.transform(freq_domain_dataset)
-        print "DFTDimReduction: PCA was fitted and the dimensionality reduced"
+        logging.info("DFTDimReduction: PCA was fitted and the dimensionality reduced")
         return reduced_freq_domain_dataset
         
     def reduce_dimentionality_of_signal(self, time_domain_signal):
         freq_domain_signal = self.seperate_real_and_imaginary_parts(rfft(time_domain_signal, self.signals_length))
         return self.pca.transform(freq_domain_signal)
    
-class Classifier(object):
         
-    def __init__(self):
-        pass
-        
-    def load_raw_dataset_from_folder(self, base_path, reduction_class, target_dimentionality):
-        self.datasets = reduction_class(target_dimentionality)
-        self.datasets.load_learning_dataset(base_path)
-        
-    def load_pickled_dataset(self, base_path, file_name):
-        self.datasets = Datasets_Manager.loader(os.path.join(base_path,file_name))
-        
-    def train_using_single_set(self, validation_set_size):
-        self.datasets.genereate_train_and_validate_from_learning_dataset(validation_set_size)            
-        self.loc_classifier, self.loc_training_score = self.train_and_choose_parameters(self.datasets.y_loc_train, self.datasets.y_loc_validate)
-        self.obj_classifier, self.obj_training_score = self.train_and_choose_parameters(self.datasets.y_obj_train, self.datasets.y_obj_validate)
-        
-    def predict_object_label(self, signal):
-        reduced_signal = self.datasets.reduce_dimentionality_of_signal(signal)
-        return self.obj_classifier.predict(reduced_signal)  
-
-    def predict_location_label(self, signal):
-        reduced_signal = self.datasets.reduce_dimentionality_of_signal(signal)
-        return self.loc_classifier.predict(reduced_signal)  
-    
-    def similarity_of_signals(self, signal_x, signal_y, distance_order=None):
-        return np.linalg.norm((signal_x-signal_y), ord=distance_order)
-    
-    def direct_search_of_closest_signal(self, signal):
-        reduced_signal = self.datasets.reduce_dimentionality_of_signal(signal)
-        minimal_distance = np.Inf
-        closest_signal = None
-        for signal in self.datasets.x:
-            distance = self.similarity_of_signals(reduced_signal, signal)
-            if distance < minimal_distance:
-                minimal_distance = distance
-                closest_signal = signal
-        return closest_signal, minimal_distance
-    
-    def save(self, to_file):
-        cPickle.dump(self, file(to_file, "wb"))
-        
-    @classmethod
-    def loader(cls, from_file):
-        return cPickle.load(file(from_file,"rb"))
-
-
-
-class RForests_classifier(Classifier):
-    
-    criterion = ["gini", "entropy"]
-    n_estimators = [1, 5, 10, 15, 20, 100, 200]
-       
-    def train_with_parameters(self, n_estimators, criterion_string, training_labels, validation_labels):
-        classifier = RandomForestClassifier(n_estimators = n_estimators, criterion=criterion_string)
-        classifier.fit(self.datasets.x_train, training_labels)
-        score = classifier.score(self.datasets.x_validate, validation_labels)
-        return classifier, score
-    
-    def train_and_choose_parameters(self, training_labels, validation_labels):
-        best_score = 0
-        best_classifier = None
-        for n_estimator in self.n_estimators:
-            for criterion_string in self.criterion:
-                classifier, score = self.train_with_parameters(n_estimator, criterion_string, training_labels, validation_labels)
-                if score >= best_score:
-                    best_score = score
-                    best_classifier = classifier
-        print "RF: Classifier trained with accuracy %s" % best_score
-        print "RF: Classifiers parameters are: %s" % best_classifier.get_params()
-        return best_classifier, best_score
-
-      
-        
-        
-if __name__ == "__main__":
-    BASE_PATH = "/Users/Butzik/Dropbox (MIT)/Sensor_Final/TrainingData_sample"
-
-    ORIGINAL_FILE_PATH = "/Users/Butzik/Dropbox (MIT)/Sensor_Final/Table_Readings/Reference_Files"
-    ORIGINAL_FILE_NAME = 'No_Input.raw'
-    
-    REDUCED_DATASET_MANAGER_FILE_NAME = "DSManager_DFTDimReduction_pickled"
-    CLASSIFIER_FILE_NAME = "RForests_classifier_pickled"
-    
-    TEST_SIGNAL = ""
-    TEST_BASE_PATH = "/Users/Butzik/Dropbox (MIT)/Sensor_Final/TestData_sample"
-    
-    NO_OF_DIMENTIONS = 50 # Note the number of dimensions should be less than the order of magnitude of the number of training samples.
-    recording_configuration = {"encoding_dtype" : np.float32,
-                               "encoding_for_array": 'f',
-                               "encoding" : "floating-point",
-                               "encoding_size" : 32,
-                               "sample_rate" : 96000}
-    
-    
-    # STEP 1: first we do some pre-processing
-    afp = AudioFilesPreprocessor(BASE_PATH,recording_configuration,os.path.join(BASE_PATH,ORIGINAL_FILE_PATH), ORIGINAL_FILE_NAME)
-    #afp.preprocess_dataset()
-    
-    # STEP 2: initialize a dataset manager instance from the reduction method of your choice and perform the dimensionality reduction on the dataset.
-    dsm = DSManager_DFTDimReduction(NO_OF_DIMENTIONS)
-    dsm.load_learning_dataset(BASE_PATH)
-    
-    current_time = datetime.datetime.now().strftime("%Y%m%d_%I%M%S")
-    dsm.save(os.path.join(BASE_PATH, REDUCED_DATASET_MANAGER_FILE_NAME + "_" + current_time))
-    
-    # STEP 3: initialize a classifier of your choice and provide the reduced dataset.
-    rfc = RForests_classifier()
-    rfc.load_pickled_dataset(BASE_PATH, REDUCED_DATASET_MANAGER_FILE_NAME + "_" + current_time)
-       
-    # Alternatively, this can be done with step 2 implicitly by using:
-    # rfc.load_raw_dataset_from_folder(BASE_PATH, DSManager_DFTDimReduction, NO_OF_DIMENTIONS)
-
-    rfc.train_using_single_set(0.2)
-    rfc.save(os.path.join(BASE_PATH,CLASSIFIER_FILE_NAME + "_" + current_time))
-    
-    loaded_rfc = RForests_classifier.loader(os.path.join(BASE_PATH,CLASSIFIER_FILE_NAME + "_" + current_time))
-    
-    afp.preprocess_file(TEST_BASE_PATH, TEST_FILE_PATH)
-    print loaded_rfc.predict_object_label(np.load(os.path.join(TEST_BASE_PATH, AudioFilesPreprocessor.original_signal_substracted_path, TEST_FILE_PATH)))
-    print loaded_rfc.predict_location_label(np.load(os.path.join(TEST_BASE_PATH, AudioFilesPreprocessor.original_signal_substracted_path, TEST_FILE_PATH)))
 
 
 
