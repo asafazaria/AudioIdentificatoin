@@ -30,7 +30,7 @@ class AudioIdentificationCommandline(object):
                                "encoding" : "floating-point",
                                "encoding_size" : 32,
                                "sample_rate" : 96000}
-    ORIGINAL_FILE_PATH = "/Users/Butzik/Dropbox (MIT)/Sensor_Final/Table_Readings/Reference_Files"
+    ORIGINAL_FILE_PATH = "/Users/Butzik/Dropbox (MIT)/Sensor_Final/Table_Readings/Them_Rejects/Reference_Files"
     ORIGINAL_FILE_NAME = 'No_Input.raw'
 
         
@@ -56,7 +56,7 @@ class AudioIdentificationCommandline(object):
                                  "classify": self.handle_classify}
 
         self.parse_commandline_arguments()
-        logging.basicConfig(self.command_args.log_path, level=logging.INFO)
+        logging.basicConfig(filename=self.command_args.log_path, level=logging.INFO)
         self.call_stage_method()
 
     def parse_commandline_arguments(self):
@@ -84,7 +84,7 @@ class AudioIdentificationCommandline(object):
         
         #Train Classifier arguments
         parser.add_argument("-c", "--classifier_type", dest="classifier_type", 
-                            choices=[ ],
+                            choices=self.CLASSIFIERS_OF_CLASS.keys(),
                             default="SVM",
                             help="Specifies what kind of classifier to train on the dataset. ALL will run all types subsequently")
         
@@ -95,7 +95,7 @@ class AudioIdentificationCommandline(object):
         self.command_args = parser.parse_args()
 
     def call_stage_method(self):
-        self.STAGE_OF_HANDLER[self.command_args.stage](self.command_args)
+        self.STAGE_OF_HANDLER[self.command_args.stage]()
 
     def handle_preprocess(self):
         afp = AudioFilesPreprocessor(self.command_args.input_path, self.RECORDING_CONF, self.ORIGINAL_FILE_PATH, self.ORIGINAL_FILE_NAME)
@@ -104,8 +104,8 @@ class AudioIdentificationCommandline(object):
         logging.info("AudioIdentificationCommandline: preprocessing done")
         
     def handle_reduce_dataset(self):    
-        dsm = self.reducers_dict[self.command_args.reducer_type](self.command_args.target_dimension)
-        dsm.load_learning_dataset(self.command_args.input_file, standardize=self.command_args.normalize)
+        dsm = self.REDUCER_OF_CLASS[self.command_args.reducer_type](self.command_args.target_dimension)
+        dsm.load_learning_dataset(self.command_args.input_path, standardize=self.command_args.normalize)
         current_time = datetime.datetime.now().strftime("%Y%m%d_%I%M%S")
         dsm.save(self.command_args.output_path + "_" + current_time+ ".reduced")
         logging.info("AudioIdentificationCommandline: data reduced to: %s" % self.command_args.output_path + "_" + current_time+ ".reduced")
