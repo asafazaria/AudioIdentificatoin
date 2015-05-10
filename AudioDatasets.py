@@ -17,6 +17,8 @@ from sklearn import preprocessing
 from AudioFilesPreprocessor import AudioFilesPreprocessor
 from sklearn.decomposition.incremental_pca import IncrementalPCA
 
+import scipy.signal as scisig
+
 
 # TODO list:
 # 1. Figure out if we want to strip silence also from the end of the files
@@ -49,6 +51,12 @@ class Datasets_Manager(object):
         self.x = reduced_dataset
         if standardize: 
             self.scaler = self.standardize_dataset()
+            
+    def load_test_set_at_once(self, base_path, standardize=True):
+        self.x_test, self.y_loc_test, self.y_obj_test = self.load_signals_dataset(base_path)
+        self.x_test = self.transform_and_reduce_dataset(self.x_test)
+        if standardize:
+            self.x_test = self.scaler.transform(self.x_test) 
         
     def standardize_dataset(self):
         scaler = preprocessing.StandardScaler().fit(self.x)
@@ -57,8 +65,6 @@ class Datasets_Manager(object):
         
     def stepwise_load_signal(self, file_path):
         signal = np.load(file_path)
-        print self.maximal_signal_length
-        print len(signal)
         padded_signal = np.pad(signal,(0,self.maximal_signal_length-len(signal)),mode="constant",constant_values=(0,))
         return padded_signal
     
@@ -157,10 +163,57 @@ class Datasets_Manager(object):
         return cPickle.load(file(from_file,"rb"))
 
     
+
+class Envelope_DimReduction(Datasets_Manager):
+    cutoff_freq = 500
+    fs = 44100
+    filter_order = 5
+    
+    def __init__(self, reduced_dimensionality, recording_configuration):
+        self.reduced_dimentionality = reduced_dimensionality
+        self.recording_conf = recording_configuration
+    
+    def compute_cutoff_and_downsampling_from_target_dim(self):
+        self.sampling_frequency = self.recording_conf["sample_rate"]
+        self.downsampling_factor = self.maximal_signal_length/self.reduced_dimentionality
+        self.cutoff_freq = (self.sampling_frequency/self.downsampling_factor) * 0.5 
+        # This would be the maximal frequency we can capture well with the sampling rate. 
+        # As we are using the ABS value of the signal, the result would be following the envelope of the signal
         
+    def load_learning_dataset(self, base_path, **kw):
+        self.load_learning_dataset_at_once(base_path, **kw)
+
+    def generate_butter_lowpass_params(self, cutoff_freq, fs, order):
+        nyq = 0.5 * fs
+        normal_cutoff = cutoff_freq / nyq
+        b, a = scisig.butter(order, normal_cutoff, btype='low', analog=False)
+        return b, a
+
+    def filter_signal_to_get_envelope(self, signal, cutoff_freq, fs, order):
+        b, a = self.generate_butter_lowpass_params(cutoff_freq, fs, order=order)
+        envelope = scisig.lfilter(b, a, signal)
+        return envelope
+    
+    def transform_and_reduce_signal(self, signal, standardize=True):
+        # Note that this function assumes that all signals are padded to the maximal length
+        envelope = self.filter_signal_to_get_envelope(np.abs(signal), self.cutoff_freq, self.sampling_frequency, self.filter_order)
+        downsampled_envelope = scisig.resample(envelope, (len(envelope)/self.downsampling_factor))
+        if standardize:
+            downsampled_envelope = self.scaler.transform(downsampled_envelope)
+        
+        np.save("./temp",downsampled_envelope)
+        return downsampled_envelope
+    
+    def transform_and_reduce_dataset(self, time_domain_dataset):
+        # Note that this function assumes it is called by load_signals_dataset. Therefore all signals are padded already to the maximal size.
+        self.compute_cutoff_and_downsampling_from_target_dim()
+        reduced_dataset = np.array([self.transform_and_reduce_signal(signal, standardize=False) for signal in time_domain_dataset])
+        return reduced_dataset
+        
+    
 class DSManager_DFTDimReduction(Datasets_Manager):
         
-    def  __init__(self, reduced_dimensionality):
+    def  __init__(self, reduced_dimensionality, recording_configuration):
         # Note: this function assumes the time_domain_dataset to be a 2D np.array where each row is a signal. See DatasetManager as an example to how it is done.
         self.reduced_dimentionality = reduced_dimensionality
 
@@ -196,13 +249,13 @@ class DSManager_DFTDimReduction(Datasets_Manager):
 class DSManager_Stepwise_DFTDimReduction(DSManager_DFTDimReduction):
     '''
     This class does the same as the DFTDimReductoin only stepwise - using IncrementalPCA.
-    It is very limited however as you an only learn the PCA with batches which are larger than the 
+    It is very limited however as you can only learn (partial fit) with batches which are larger than the 
     size of the dimensionality you would ultimately want to get.
     
     It serves as a good example though for reducing the dataset stepwise.
     '''
     
-    def  __init__(self, reduced_dimensionality, batch_size):
+    def  __init__(self, reduced_dimensionality, recording_configuration):
         # Note: this function assumes the time_domain_dataset to be a 2D np.array where each row is a signal. See DatasetManager as an example to how it is done.
         self.reduced_dimentionality = reduced_dimensionality
         self.pca = decomposition.IncrementalPCA(n_components=self.reduced_dimentionality)

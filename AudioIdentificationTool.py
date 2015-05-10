@@ -15,7 +15,7 @@ import numpy as np
 
 from AudioFilesPreprocessor import AudioFilesPreprocessor
 from Classifiers import *
-from AudioDatasets import DSManager_DFTDimReduction
+from AudioDatasets import DSManager_DFTDimReduction, Envelope_DimReduction
 
 class AudioIdentificationCommandline(object):
 
@@ -23,7 +23,7 @@ class AudioIdentificationCommandline(object):
     DEFAULT_LOG_NAME = "AudioIdentificationToolLog.log"
     
     VALIDATION_SET_SIZE = 0.2
-    NO_OF_DIMENTIONS = 1
+    NO_OF_DIMENTIONS = 128
     
     RECORDING_CONF = {"encoding_dtype" : np.float32,
                                "encoding_for_array": 'f',
@@ -35,7 +35,8 @@ class AudioIdentificationCommandline(object):
 
         
     # State here the class for each reducer command
-    REDUCER_OF_CLASS = {"DFT_PCA": DSManager_DFTDimReduction, 
+    REDUCER_OF_CLASS = {"DFT_PCA": DSManager_DFTDimReduction,
+                        "ENVELOPE": Envelope_DimReduction,
                         "WAVELETS": None,
                         "PAA": None}
     
@@ -113,7 +114,7 @@ class AudioIdentificationCommandline(object):
         logging.error("AudioIdentificationCommandline: preprocessing done")
         
     def handle_reduce_dataset(self):    
-        dsm = self.REDUCER_OF_CLASS[self.command_args.reducer_type](self.command_args.target_dimension)
+        dsm = self.REDUCER_OF_CLASS[self.command_args.reducer_type](self.command_args.target_dimension, self.RECORDING_CONF)
         dsm.load_learning_dataset(self.command_args.input_path) #standardize=self.command_args.normalize)
         current_time = datetime.datetime.now().strftime("%Y%m%d_%I%M%S")
         dsm.save(self.command_args.output_path + "_" + current_time+ ".reduced")

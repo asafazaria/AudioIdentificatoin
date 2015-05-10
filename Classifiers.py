@@ -28,6 +28,9 @@ class Classifier(object):
         self.datasets = reduction_class(target_dimentionality)
         self.datasets.load_learning_dataset(base_path)
         
+    def load_test_set_from_folder(self, base_path):
+        self.datasets.load_test_set_at_once()
+        
     def load_pickled_dataset(self, file_path):
         self.datasets = Datasets_Manager.loader(file_path)
         
@@ -36,6 +39,7 @@ class Classifier(object):
         #self.loc_classifier, self.loc_training_score = self.train_and_choose_parameters(self.datasets.y_loc_train, self.datasets.y_loc_validate)
         self.obj_classifier, self.obj_training_score = self.train_and_choose_parameters(self.datasets.y_obj_train, self.datasets.y_obj_validate)
         
+                
     def predict_object_label_for_file(self, base_path, file_name, recording_configuration, original_base, original_name):
         afp = AudioFilesPreprocessor(base_path, recording_configuration, original_base, original_name)
         afp.preprocess_file(base_path, file_name)
