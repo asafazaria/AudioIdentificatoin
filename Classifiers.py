@@ -14,6 +14,7 @@ from sklearn import linear_model
 from sklearn.svm import SVC
 from sklearn import neighbors
 from sklearn.ensemble import AdaBoostClassifier
+from sklearn.metrics import classification_report
 
 from AudioDatasets import Datasets_Manager
 from AudioFilesPreprocessor import AudioFilesPreprocessor
@@ -29,13 +30,21 @@ class Classifier(object):
         self.datasets.load_learning_dataset(base_path)
         
     def load_test_set_from_folder(self, base_path):
-        self.datasets.load_test_set_at_once()
+        # Note that the datasets object takes care of scaling, reduction etc.. but not Preprocessing! (This should be done once separately)
+        self.datasets.load_test_set_at_once(base_path)
         
     def load_pickled_dataset(self, file_path):
         self.datasets = Datasets_Manager.loader(file_path)
         
+    def evaluate_accuracy_on_test_set(self, test_set_path):
+        self.load_test_set_from_folder(test_set_path)
+        predicted_y = self.obj_classifier.predict(self.datasets.x_test)
+        # Note this is tightly coupled with the definitions in AudioDatasets - should be fixed and updated with the right names
+        target_names = ["C","K", "M", "S"]
+        print classification_report(self.datasets.y_obj_test, predicted_y, target_names=target_names)
+        
     def train_using_single_set(self, validation_set_size):
-        self.datasets.genereate_train_and_validate_from_learning_dataset(validation_set_size)            
+        self.datasets.genereate_train_and_validate_from_learning_dataset(validation_set_size)
         #self.loc_classifier, self.loc_training_score = self.train_and_choose_parameters(self.datasets.y_loc_train, self.datasets.y_loc_validate)
         self.obj_classifier, self.obj_training_score = self.train_and_choose_parameters(self.datasets.y_obj_train, self.datasets.y_obj_validate)
         
@@ -50,8 +59,8 @@ class Classifier(object):
     def predict_object_label(self, reduced_signal):
         return self.obj_classifier.predict(reduced_signal)  
 
-    def predict_location_label(self, reduced_signal):
-        return self.loc_classifier.predict(reduced_signal)  
+    #def predict_location_label(self, reduced_signal):
+    #    return self.loc_classifier.predict(reduced_signal)  
     
     def similarity_of_signals(self, signal_x, signal_y, distance_order=None):
         return np.linalg.norm((signal_x-signal_y), ord=distance_order)
@@ -66,6 +75,7 @@ class Classifier(object):
                 minimal_distance = distance
                 closest_signal = signal
         return closest_signal, minimal_distance
+
     
     def save(self, to_file):
         cPickle.dump(self, file(to_file, "wb"))

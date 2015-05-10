@@ -54,7 +54,8 @@ class AudioIdentificationCommandline(object):
         self.STAGE_OF_HANDLER = {"preprocess": self.handle_preprocess, 
                                  "reduce_dataset": self.handle_reduce_dataset, 
                                  "train_classifier": self.handle_train_classifier, 
-                                 "classify": self.handle_classify}
+                                 "classify": self.handle_classify,
+                                 "evaluate_testset": self.handle_evaluate_testset}
 
         self.parse_commandline_arguments()
         logging.basicConfig(filename=self.command_args.log_path, level=logging.INFO)
@@ -133,6 +134,11 @@ class AudioIdentificationCommandline(object):
         base_path, file_name = os.path.split(self.command_args.output_path)
         prediction = classifier.predict_object_label_for_file(base_path, file_name,self.RECORDING_CONF, self.ORIGINAL_FILE_PATH, self.ORIGINAL_FILE_NAME)
         logging.error("Prediction: %s" % prediction)
+        
+        
+    def handle_evaluate_testset(self):
+        classifier = Classifier.loader(self.command_args.input_path)
+        classifier.evaluate_accuracy_on_test_set(self.command_args.output_path)
 
 if __name__ == "__main__":
     AudioIdentificationCommandline()

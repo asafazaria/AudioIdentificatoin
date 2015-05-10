@@ -21,18 +21,15 @@ import scipy.signal as scisig
 
 
 # TODO list:
-# 1. Figure out if we want to strip silence also from the end of the files
-# 2. Change the silence measurement to dB rather than percentage
-# 3. Normalize the sound file by taking the Z-score? (In Preprocessor)
-# 4. Implement the extraction of the class labels
-# 5. Look at the results from the PCA with None reduction to pick the dimensionality to reduce to
+# 1. Note that there are two types of normalizing - before and after the reduction. Now both are set to True by default
 # 6. Try to use magnitude and phase before doing PCA rather than real and imaginary parts
 # 7. Make it more efficient so it will not have to do the DFT several times.
+# 8. Figure out the final datasets we would like to run on.
+# 9. ALL classifier which trains all classifiers.
+# 10. Report accuracy on test set
+# 11. fix the logger to print to the terminal as well
 
 
-# Metal - 44100
-# C - half and half
-# Keys - 96000  
 
 class Datasets_Manager(object):
     def __init__(self):
@@ -199,9 +196,7 @@ class Envelope_DimReduction(Datasets_Manager):
         envelope = self.filter_signal_to_get_envelope(np.abs(signal), self.cutoff_freq, self.sampling_frequency, self.filter_order)
         downsampled_envelope = scisig.resample(envelope, (len(envelope)/self.downsampling_factor))
         if standardize:
-            downsampled_envelope = self.scaler.transform(downsampled_envelope)
-        
-        np.save("./temp",downsampled_envelope)
+            downsampled_envelope = self.scaler.transform(downsampled_envelope)        
         return downsampled_envelope
     
     def transform_and_reduce_dataset(self, time_domain_dataset):
