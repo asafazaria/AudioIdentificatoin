@@ -15,6 +15,7 @@ from sklearn import decomposition
 from sklearn import preprocessing
 
 from AudioFilesPreprocessor import AudioFilesPreprocessor
+from sklearn.decomposition.incremental_pca import IncrementalPCA
 
 
 # TODO list:
@@ -34,26 +35,82 @@ from AudioFilesPreprocessor import AudioFilesPreprocessor
 class Datasets_Manager(object):
     def __init__(self):
         pass
+                    
+    def load_learning_dataset_stepwise(self, base_path, standardize=True):    
+        self.x, self.y_loc, self.y_obj = self.stepwise_load_and_reduce_dataset(base_path)
+        if standardize: 
+            self.scaler = self.standardize_dataset()
         
-    def load_learning_dataset (self, base_path, standardize=False):
+    def load_learning_dataset_at_once(self, base_path, standardize_before_reduction=False, standardize=True):
         self.x, self.y_loc, self.y_obj = self.load_signals_dataset(base_path)
-        if standardize: self.standardize_dataset()
+        if standardize_before_reduction: self.standardize_dataset()
         reduced_dataset = self.transform_and_reduce_dataset(self.x)
         del self.x
         self.x = reduced_dataset
+        if standardize: 
+            self.scaler = self.standardize_dataset()
         
     def standardize_dataset(self):
-        self.scaler = preprocessing.StandardScaler().fit(self.x)
-        self.x = self.scaler.transform(self.x)
+        scaler = preprocessing.StandardScaler().fit(self.x)
+        self.x = scaler.transform(self.x)
+        return scaler
         
+    def stepwise_load_signal(self, file_path):
+        signal = np.load(file_path)
+        print self.maximal_signal_length
+        print len(signal)
+        padded_signal = np.pad(signal,(0,self.maximal_signal_length-len(signal)),mode="constant",constant_values=(0,))
+        return padded_signal
+    
+    def learn_reduction_for_dataset(self, base_path):
+        logging.error("Datasets_Manager: learning reduction from %s" % base_path)
+        data_file_names = [file_name for file_name in os.listdir(base_path)
+                           if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
+        for file_name in data_file_names:
+            loaded_signal = self.stepwise_load_signal(os.path.join(base_path,file_name))
+            self.stepwise_learn_reduction(loaded_signal)
+            del loaded_signal
+    
+    def get_maximal_signal_length(self, base_path):    
+        data_file_names = [file_name for file_name in os.listdir(base_path)
+                           if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
+        self.maximal_signal_length = 0
+        for file_name in data_file_names:
+            loaded_signal = self.stepwise_load_signal(os.path.join(base_path,file_name))
+            self.maximal_signal_length = max(self.maximal_signal_length, len(loaded_signal))
+            del loaded_signal
+
+    def transform_dataset_according_to_learnt_reduction(self, base_path):
+        logging.error("Datasets_Manager: transforming %s according to reduction" % base_path)
+        data_file_names = [file_name for file_name in os.listdir(base_path)
+                           if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
+        x = np.empty((0,self.reduced_dimensionality), dtype=np.float32)
+        y_loc = np.empty((0,1), dtype=int)
+        y_obj = np.empty((0,1), dtype=int)
+        for file_name in data_file_names:
+            loaded_signal = self.stepwise_load_signal(os.path.join(base_path,file_name))
+            reduced_signal = self.stepwise_reduce_signal(loaded_signal)
+            x = np.append(x,reduced_signal, axis=0)
+            y_loc = np.append(y_loc, self.get_location_label_from_filename(file_name), axis=0)
+            y_obj = np.append(y_obj, self.get_object_label_from_filename(file_name), axis=0)
+            del loaded_signal
+            del reduced_signal
+        return x, y_loc, y_obj
+
+    def stepwise_load_and_reduce_dataset(self, base_path):
+        logging.error("Datasets_Manager: loading dataset step by step from %s" % base_path)
+        self.learn_reduction_for_dataset(base_path)
+        return self.transform_dataset_according_to_learnt_reduction(base_path)
+        
+            
     def load_signals_dataset(self, base_path):
-        logging.info("Datasets_Manager: loading dataset from %s" % base_path)
+        logging.error("Datasets_Manager: loading dataset from %s" % base_path)
         data_file_names = [file_name for file_name in os.listdir(base_path)
                            if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
         np_arrays_dataset = [np.load(os.path.join(base_path,file_name)) for file_name in data_file_names]
         signal_lengths = [len(np_array) for np_array in np_arrays_dataset]
-        maximal_signal_length = max(signal_lengths)
-        x = np.array([np.pad(signal,(0,maximal_signal_length-len(signal)),mode="constant",constant_values=(0,)).tolist() for signal in np_arrays_dataset])
+        self.maximal_signal_length = max(signal_lengths)
+        x = np.array([np.pad(signal,(0,self.maximal_signal_length-len(signal)),mode="constant",constant_values=(0,)).tolist() for signal in np_arrays_dataset])
         
         y_loc = np.array([self.get_location_label_from_filename(file_name) for file_name in data_file_names])
         y_obj = np.array([self.get_object_label_from_filename(file_name) for file_name in data_file_names])
@@ -65,6 +122,7 @@ class Datasets_Manager(object):
                            "C":0,
                            "K":1,
                            "M":2,
+                           "S":3,
                            }
         return objects_mapping[file_name[0]]
     
@@ -99,18 +157,20 @@ class Datasets_Manager(object):
         return cPickle.load(file(from_file,"rb"))
 
     
-
         
 class DSManager_DFTDimReduction(Datasets_Manager):
-    
+        
     def  __init__(self, reduced_dimensionality):
         # Note: this function assumes the time_domain_dataset to be a 2D np.array where each row is a signal. See DatasetManager as an example to how it is done.
         self.reduced_dimentionality = reduced_dimensionality
+
+    def load_learning_dataset(self, base_path, **kw):
+        self.load_learning_dataset_at_once(base_path, **kw)
     
     def seperate_real_and_imaginary_parts(self, signal):
         expanded_signal = np.array(np.append(np.real(signal), np.imag(signal)))
         return expanded_signal
-        
+
     def transform_and_reduce_dataset(self, time_domain_dataset):
         # This is only to make sure that all signals are of the same length, otherwise we will not have the same granularity in the frequency domain.
         signal_lengths = [len(signal) for signal in time_domain_dataset]
@@ -118,31 +178,48 @@ class DSManager_DFTDimReduction(Datasets_Manager):
         self.signals_length = max(signal_lengths)
                 
         freq_domain_dataset = np.array([self.seperate_real_and_imaginary_parts(rfft(signal)) for signal in time_domain_dataset])
-        self.pca = decomposition.IncrementalPCA(n_components=self.reduced_dimentionality, batch_size=2, copy=False)
+        self.pca = decomposition.PCA(n_components=self.reduced_dimentionality)
         logging.info("DSManager_DFTDimReduction: fitting PCA to frequency domain dataset to reduce dimensionality")
-        #self.pca.fit(freq_domain_dataset)
+        self.pca.fit(freq_domain_dataset)
         reduced_freq_domain_dataset = self.pca.transform(freq_domain_dataset)
         logging.info("DFTDimReduction: PCA was fitted and the dimensionality reduced")
         return reduced_freq_domain_dataset
         
-    def reduce_dimentionality_of_signal(self, time_domain_signal):
+    def transform_and_reduce_signal(self, time_domain_signal, standardize=True):
         freq_domain_signal = self.seperate_real_and_imaginary_parts(rfft(time_domain_signal, self.signals_length))
-        return self.pca.transform(freq_domain_signal)
+        reduced_signal = self.pca.transform(freq_domain_signal)
+        if standardize:
+            reduced_signal=self.scaler.transform(reduced_signal)
+        return reduced_signal
     
-    def save(self, to_file):
-        relevant_objects = (self.x,
-                            self.y_loc,
-                            self.y_obj,
-                            self.pca)
-        cPickle.dump(relevant_objects, file(to_file, "wb"))
-        
-    @classmethod
-    def loader(cls, from_file): 
-        relevant_objects = cPickle.load(file(from_file,"rb"))
-        dataset_instance = cls()
-        dataset_instance.x, dataset_instance.y_loc, dataset_instance.y_obj, dataset_instance.pca = relevant_objects 
-        return dataset_instance
+    
+class DSManager_Stepwise_DFTDimReduction(DSManager_DFTDimReduction):
+    '''
+    This class does the same as the DFTDimReductoin only stepwise - using IncrementalPCA.
+    It is very limited however as you an only learn the PCA with batches which are larger than the 
+    size of the dimensionality you would ultimately want to get.
+    
+    It serves as a good example though for reducing the dataset stepwise.
+    '''
+    
+    def  __init__(self, reduced_dimensionality, batch_size):
+        # Note: this function assumes the time_domain_dataset to be a 2D np.array where each row is a signal. See DatasetManager as an example to how it is done.
+        self.reduced_dimentionality = reduced_dimensionality
+        self.pca = decomposition.IncrementalPCA(n_components=self.reduced_dimentionality)
 
-   
+    def load_learning_dataset(self, base_path, **kw):
+        self.get_maximal_signal_length(base_path)
+        self.load_learning_dataset_stepwise(base_path, **kw)
+    
+    def stepwise_learn_reduction(self, signal):
+        assert len(signal) == self.maximal_signal_length
+        freq_domain_signal = self.seperate_real_and_imaginary_parts(rfft(signal))
+        self.pca.partial_fit(freq_domain_signal)
+        
+    def stepwise_reduce_signal(self, signal):
+        assert len(signal) == self.maximal_signal_length
+        freq_domain_signal = self.seperate_real_and_imaginary_parts(rfft(signal))
+        return self.pca.transform(freq_domain_signal)
+
         
 

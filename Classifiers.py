@@ -16,6 +16,7 @@ from sklearn import neighbors
 from sklearn.ensemble import AdaBoostClassifier
 
 from AudioDatasets import Datasets_Manager
+from AudioFilesPreprocessor import AudioFilesPreprocessor
 
 
 class Classifier(object):
@@ -32,15 +33,20 @@ class Classifier(object):
         
     def train_using_single_set(self, validation_set_size):
         self.datasets.genereate_train_and_validate_from_learning_dataset(validation_set_size)            
-        self.loc_classifier, self.loc_training_score = self.train_and_choose_parameters(self.datasets.y_loc_train, self.datasets.y_loc_validate)
+        #self.loc_classifier, self.loc_training_score = self.train_and_choose_parameters(self.datasets.y_loc_train, self.datasets.y_loc_validate)
         self.obj_classifier, self.obj_training_score = self.train_and_choose_parameters(self.datasets.y_obj_train, self.datasets.y_obj_validate)
         
-    def predict_object_label(self, signal):
-        reduced_signal = self.datasets.reduce_dimentionality_of_signal(signal)
+    def predict_object_label_for_file(self, base_path, file_name, recording_configuration, original_base, original_name):
+        afp = AudioFilesPreprocessor(base_path, recording_configuration, original_base, original_name)
+        afp.preprocess_file(base_path, file_name)
+        signal = self.datasets.stepwise_load_signal(os.path.join(base_path,AudioFilesPreprocessor.original_signal_substracted_path,file_name+".npy"))
+        reduced_signal = self.datasets.transform_and_reduce_signal(signal)
+        return self.predict_object_label(reduced_signal)
+        
+    def predict_object_label(self, reduced_signal):
         return self.obj_classifier.predict(reduced_signal)  
 
-    def predict_location_label(self, signal):
-        reduced_signal = self.datasets.reduce_dimentionality_of_signal(signal)
+    def predict_location_label(self, reduced_signal):
         return self.loc_classifier.predict(reduced_signal)  
     
     def similarity_of_signals(self, signal_x, signal_y, distance_order=None):
@@ -107,7 +113,7 @@ class LogisticRegression_classifier(Classifier):
         best_classifier = None
         for c_value in self.C:
             for pen in self.penalty:
-                classifier, score = self.train_with_parameters(c_value, pen)
+                classifier, score = self.train_with_parameters(c_value, pen,training_labels, validation_labels)
                 if score >= best_score:
                     best_score = score
                     best_classifier = classifier
@@ -188,7 +194,7 @@ class KNN_classifier(Classifier):
             for w in self.weights:
                 for l in self.leaf_size:
                     for p in self.p_value:
-                        classifier, score = self.train_with_parameters(k,w,l,p)
+                        classifier, score = self.train_with_parameters(k,w,l,p, training_labels, validation_labels)
                         if score >= best_score:
                             best_score = score
                             best_classifier = classifier
