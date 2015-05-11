@@ -8,16 +8,15 @@ Created on May 1, 2015
 import os
 import cPickle
 import numpy as np
-import logging
 
+import scipy.signal as scisig
 from scipy.fftpack import rfft
+
 from sklearn import decomposition
 from sklearn import preprocessing
 
-from AudioFilesPreprocessor import AudioFilesPreprocessor
-from sklearn.decomposition.incremental_pca import IncrementalPCA
+from Logging import Logger
 
-import scipy.signal as scisig
 
 
 # TODO list:
@@ -66,7 +65,7 @@ class Datasets_Manager(object):
         return padded_signal
     
     def learn_reduction_for_dataset(self, base_path):
-        logging.error("Datasets_Manager: learning reduction from %s" % base_path)
+        Logger.log("Datasets_Manager: learning reduction from %s" % base_path)
         data_file_names = [file_name for file_name in os.listdir(base_path)
                            if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
         for file_name in data_file_names:
@@ -84,7 +83,7 @@ class Datasets_Manager(object):
             del loaded_signal
 
     def transform_dataset_according_to_learnt_reduction(self, base_path):
-        logging.error("Datasets_Manager: transforming %s according to reduction" % base_path)
+        Logger.log("Datasets_Manager: transforming %s according to reduction" % base_path)
         data_file_names = [file_name for file_name in os.listdir(base_path)
                            if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
         x = np.empty((0,self.reduced_dimensionality), dtype=np.float32)
@@ -101,13 +100,13 @@ class Datasets_Manager(object):
         return x, y_loc, y_obj
 
     def stepwise_load_and_reduce_dataset(self, base_path):
-        logging.error("Datasets_Manager: loading dataset step by step from %s" % base_path)
+        Logger.log("Datasets_Manager: loading dataset step by step from %s" % base_path)
         self.learn_reduction_for_dataset(base_path)
         return self.transform_dataset_according_to_learnt_reduction(base_path)
         
             
     def load_signals_dataset(self, base_path):
-        logging.error("Datasets_Manager: loading dataset from %s" % base_path)
+        Logger.log("Datasets_Manager: loading dataset from %s" % base_path)
         data_file_names = [file_name for file_name in os.listdir(base_path)
                            if (os.path.isfile(os.path.join(base_path,file_name))) and ("DS" not in file_name)]
         np_arrays_dataset = [np.load(os.path.join(base_path,file_name)) for file_name in data_file_names]
@@ -117,7 +116,7 @@ class Datasets_Manager(object):
         
         y_loc = np.array([self.get_location_label_from_filename(file_name) for file_name in data_file_names])
         y_obj = np.array([self.get_object_label_from_filename(file_name) for file_name in data_file_names])
-        logging.info("Datasets_Manager: dataset loaded")
+        Logger.log("Datasets_Manager: dataset loaded")
         return x, y_loc, y_obj
     
     def get_object_label_from_filename(self, file_name):
@@ -227,10 +226,10 @@ class DSManager_DFTDimReduction(Datasets_Manager):
                 
         freq_domain_dataset = np.array([self.seperate_real_and_imaginary_parts(rfft(signal)) for signal in time_domain_dataset])
         self.pca = decomposition.PCA(n_components=self.reduced_dimentionality)
-        logging.info("DSManager_DFTDimReduction: fitting PCA to frequency domain dataset to reduce dimensionality")
+        Logger.log("DSManager_DFTDimReduction: fitting PCA to frequency domain dataset to reduce dimensionality")
         self.pca.fit(freq_domain_dataset)
         reduced_freq_domain_dataset = self.pca.transform(freq_domain_dataset)
-        logging.info("DFTDimReduction: PCA was fitted and the dimensionality reduced")
+        Logger.log("DFTDimReduction: PCA was fitted and the dimensionality reduced")
         return reduced_freq_domain_dataset
         
     def transform_and_reduce_signal(self, time_domain_signal, standardize=True):

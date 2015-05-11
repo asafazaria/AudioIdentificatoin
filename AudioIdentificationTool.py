@@ -7,15 +7,16 @@ Created on May 7, 2015
 
 import os
 import datetime
-import logging
 import argparse
 import numpy as np
 
 
-
+from Logging import Logger
 from AudioFilesPreprocessor import AudioFilesPreprocessor
 from Classifiers import *
 from AudioDatasets import DSManager_DFTDimReduction, Envelope_DimReduction
+
+
 
 class AudioIdentificationCommandline(object):
 
@@ -58,7 +59,7 @@ class AudioIdentificationCommandline(object):
                                  "evaluate_testset": self.handle_evaluate_testset}
 
         self.parse_commandline_arguments()
-        logging.basicConfig(filename=self.command_args.log_path, level=logging.INFO)
+        Logger.set_log_path(self.command_args.log_path)
         self.call_stage_method()
 
     def parse_commandline_arguments(self):
@@ -112,14 +113,14 @@ class AudioIdentificationCommandline(object):
         else:
             os.symlink(os.path.join(self.command_args.input_path,AudioFilesPreprocessor.silence_stripped_path), self.command_args.output_path)
             
-        logging.error("AudioIdentificationCommandline: preprocessing done")
+        Logger.log("AudioIdentificationCommandline: preprocessing done")
         
     def handle_reduce_dataset(self):    
         dsm = self.REDUCER_OF_CLASS[self.command_args.reducer_type](self.command_args.target_dimension, self.RECORDING_CONF)
         dsm.load_learning_dataset(self.command_args.input_path) #standardize=self.command_args.normalize)
         current_time = datetime.datetime.now().strftime("%Y%m%d_%I%M%S")
         dsm.save(self.command_args.output_path + "_" + current_time+ ".reduced")
-        logging.error("AudioIdentificationCommandline: data reduced to: %s" % self.command_args.output_path + "_" + current_time+ ".reduced")
+        Logger.log("AudioIdentificationCommandline: data reduced to: %s" % self.command_args.output_path + "_" + current_time+ ".reduced")
         
     def handle_train_classifier(self):
         classifier = self.CLASSIFIERS_OF_CLASS[self.command_args.classifier_type]()
@@ -127,13 +128,13 @@ class AudioIdentificationCommandline(object):
         classifier.train_using_single_set(self.VALIDATION_SET_SIZE)
         current_time = datetime.datetime.now().strftime("%Y%m%d_%I%M%S")
         classifier.save(self.command_args.output_path + "_" + current_time + ".classifier")
-        logging.error("AudioIdentificationCommandline: classifier trained: %s" % self.command_args.output_path + "_" + current_time + ".classifier")
+        Logger.log("AudioIdentificationCommandline: classifier trained: %s" % self.command_args.output_path + "_" + current_time + ".classifier")
 
     def handle_classify(self):
         classifier = Classifier.loader(self.command_args.input_path)
         base_path, file_name = os.path.split(self.command_args.output_path)
         prediction = classifier.predict_object_label_for_file(base_path, file_name,self.RECORDING_CONF, self.ORIGINAL_FILE_PATH, self.ORIGINAL_FILE_NAME)
-        logging.error("Prediction: %s" % prediction)
+        Logger.log("Prediction: %s" % prediction)
         
         
     def handle_evaluate_testset(self):

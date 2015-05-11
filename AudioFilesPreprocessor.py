@@ -7,9 +7,9 @@ Created on May 7, 2015
 import os
 import numpy as np
 import array
-import logging
 from scipy.fftpack import rfft, irfft
 
+from Logging import Logger
 
 class AudioFilesPreprocessor(object):
     
@@ -47,8 +47,8 @@ class AudioFilesPreprocessor(object):
                                                                                 self.silence_configuration["below_period"],
                                                                                 self.silence_configuration["override_duration"],
                                                                                 str(self.silence_configuration["threshold"]) + 'd')
-        logging.error("AudioFilesPreprocessor: removing silence: %s" % (sox_command + silence_filter))
-        logging.error("AudioFilesPreprocessor: execution result: %s" % os.popen(sox_command + silence_filter).read())
+        Logger.log("AudioFilesPreprocessor: removing silence: %s" % (sox_command + silence_filter))
+        Logger.log("AudioFilesPreprocessor: execution result: %s" % os.popen(sox_command + silence_filter).read())
         
     def strip_silence_from_entire_dataset(self):
         files = [self.strip_silence_from_file(self.base_path,file_name) for file_name in os.listdir(self.base_path) if (("DS" not in file_name) and (os.path.isfile(os.path.join(self.base_path,file_name))))]
@@ -80,7 +80,7 @@ class AudioFilesPreprocessor(object):
         files_list = [file_name for file_name in os.listdir(os.path.join(self.base_path,self.silence_stripped_path)) 
                       if (os.path.isfile(os.path.join(self.base_path,self.silence_stripped_path,file_name)) and ("DS" not in file_name))]    
         for file_name in files_list:
-            logging.error("AudioFilesPreprocessor: removing original sound: %s from: %s" % 
+            Logger.log("AudioFilesPreprocessor: removing original sound: %s from: %s" % 
                          (os.path.join(original_signal_base_path,original_signal_file_name),file_name))
             signal = self.get_signal_array_from_file(os.path.join(self.base_path,self.silence_stripped_path), file_name)
             substracted_signal = self.subtract_original_signal_from_picked_signal(self.original_signal,signal)
@@ -90,10 +90,10 @@ class AudioFilesPreprocessor(object):
     def preprocess_dataset(self, strip_silence=True, subtract_original=True):
         if strip_silence: self.strip_silence_from_entire_dataset()
         if subtract_original: self.subtract_original_signal_from_dataset(self.original_sound_base_path, self.original_sound_file_name)
-        logging.error("AudioFilesPreprocessor:dataset preprocessed. Maximal signal length is %s " % self.maximal_signal_length)
+        Logger.log("AudioFilesPreprocessor:dataset preprocessed. Maximal signal length is %s " % self.maximal_signal_length)
         
     def preprocess_file(self, base_path, file_name, strip_silence=True, subtract_original=True):
-        logging.error("AudioFilesPreprocessor: preprocessing file: %s" % file_name)
+        Logger.log("AudioFilesPreprocessor: preprocessing file: %s" % file_name)
         signal = self.get_signal_array_from_file(base_path, file_name)
         
         self.strip_silence_from_file(self.original_sound_base_path, self.original_sound_file_name)

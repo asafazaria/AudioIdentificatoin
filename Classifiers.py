@@ -7,7 +7,6 @@ Created on May 7, 2015
 import os
 import cPickle
 import numpy as np
-import logging
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn import linear_model
@@ -16,6 +15,7 @@ from sklearn import neighbors
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.metrics import classification_report
 
+from Logging import Logger
 from AudioDatasets import Datasets_Manager
 from AudioFilesPreprocessor import AudioFilesPreprocessor
 
@@ -41,7 +41,7 @@ class Classifier(object):
         predicted_y = self.obj_classifier.predict(self.datasets.x_test)
         # Note this is tightly coupled with the definitions in AudioDatasets - should be fixed and updated with the right names
         target_names = ["C","K", "M", "S"]
-        print classification_report(self.datasets.y_obj_test, predicted_y, target_names=target_names)
+        Logger.log(classification_report(self.datasets.y_obj_test, predicted_y, target_names=target_names))
         
     def train_using_single_set(self, validation_set_size):
         self.datasets.genereate_train_and_validate_from_learning_dataset(validation_set_size)
@@ -106,8 +106,8 @@ class RForests_classifier(Classifier):
                 if score >= best_score:
                     best_score = score
                     best_classifier = classifier
-        logging.info("RF: Classifier trained with accuracy %s" % best_score)
-        logging.info("RF: Classifiers parameters are: %s" % best_classifier.get_params())
+        Logger.log("RF: Classifier trained with accuracy %s" % best_score)
+        Logger.log("RF: Classifiers parameters are: %s" % best_classifier.get_params())
         return best_classifier, best_score
 
 
@@ -131,8 +131,8 @@ class LogisticRegression_classifier(Classifier):
                 if score >= best_score:
                     best_score = score
                     best_classifier = classifier
-        logging.info("LOGISTICREG: Classifier trained with accuracy %s" % best_score)
-        logging.info("LOGISTICREG: Classifiers parameters are: %s" % best_classifier.get_params())
+        Logger.log("LOGISTICREG: Classifier trained with accuracy %s" % best_score)
+        Logger.log("LOGISTICREG: Classifiers parameters are: %s" % best_classifier.get_params())
         return best_classifier, best_score
     
     
@@ -184,8 +184,8 @@ class SVM_classifier(Classifier):
             best_classifier = rfb_classifier
             best_score = rbf_score
         
-        logging.info("SVM: Classifier trained with accuracy %s" % best_score)
-        logging.info("SVM: Classifiers parameters are: %s" % best_classifier.get_params())
+        Logger.log("SVM: Classifier trained with accuracy %s" % best_score)
+        Logger.log("SVM: Classifiers parameters are: %s" % best_classifier.get_params())
         
         return best_classifier, best_score
       
@@ -212,8 +212,8 @@ class KNN_classifier(Classifier):
                         if score >= best_score:
                             best_score = score
                             best_classifier = classifier
-        logging.info("KNN: Classifier trained with accuracy %s" % best_score)
-        logging.info("KNN: Classifiers parameters are: %s" % best_classifier.get_params())
+        Logger.log("KNN: Classifier trained with accuracy %s" % best_score)
+        Logger.log("KNN: Classifiers parameters are: %s" % best_classifier.get_params())
         return best_classifier, best_score
 
 
@@ -235,7 +235,7 @@ class Adaboost_classifier(Classifier):
             if score >= best_score:
                 best_score = score
                 best_classifier = classifier
-        logging.info("ADABOOST: Classifier trained with accuracy %s" % best_score)
-        logging.info("ADABOOST: Classifiers parameters are: %s" % best_classifier.get_params())
+        Logger.log("ADABOOST: Classifier trained with accuracy %s" % best_score)
+        Logger.log("ADABOOST: Classifiers parameters are: %s" % best_classifier.get_params())
         return best_classifier, best_score
         
